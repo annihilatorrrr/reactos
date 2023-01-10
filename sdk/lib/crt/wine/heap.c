@@ -44,6 +44,7 @@
 #define MSVCRT_free free
 #define MSVCRT_memmove_s memmove_s
 #define MSVCRT_strncpy_s strncpy_s
+#define msvcrt_set_errno _dosmaperr
 
 /* MT */
 #define LOCK_HEAP   _mlock( _HEAP_LOCK )
@@ -277,7 +278,7 @@ int CDECL _heapchk(void)
   if (!HeapValidate(heap, 0, NULL) ||
           (sb_heap && !HeapValidate(sb_heap, 0, NULL)))
   {
-    _dosmaperr(GetLastError());
+    msvcrt_set_errno(GetLastError());
     return MSVCRT__HEAPBADNODE;
   }
   return MSVCRT__HEAPOK;
@@ -292,7 +293,7 @@ int CDECL _heapmin(void)
           (sb_heap && !HeapCompact( sb_heap, 0 )))
   {
     if (GetLastError() != ERROR_CALL_NOT_IMPLEMENTED)
-      _dosmaperr(GetLastError());
+      msvcrt_set_errno(GetLastError());
     return -1;
   }
   return 0;
@@ -317,7 +318,7 @@ int CDECL _heapwalk(struct MSVCRT__heapinfo* next)
       !HeapValidate( heap, 0, phe.lpData ))
   {
     UNLOCK_HEAP;
-    _dosmaperr(GetLastError());
+    msvcrt_set_errno(GetLastError());
     return MSVCRT__HEAPBADNODE;
   }
 
@@ -328,7 +329,7 @@ int CDECL _heapwalk(struct MSVCRT__heapinfo* next)
       UNLOCK_HEAP;
       if (GetLastError() == ERROR_NO_MORE_ITEMS)
          return MSVCRT__HEAPEND;
-      _dosmaperr(GetLastError());
+      msvcrt_set_errno(GetLastError());
       if (!phe.lpData)
         return MSVCRT__HEAPBADBEGIN;
       return MSVCRT__HEAPBADNODE;
