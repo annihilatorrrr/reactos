@@ -426,7 +426,6 @@ void* CDECL MSVCRT_calloc(MSVCRT_size_t count, MSVCRT_size_t size)
  */
 void CDECL MSVCRT_free(void* ptr)
 {
-  if(ptr == NULL) return;
   msvcrt_heap_free(ptr);
 }
 
