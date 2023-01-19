@@ -4927,8 +4927,7 @@ class StringTable:
     write( "  extern\n" )
     write( "#endif\n" )
     write( "#endif\n" )
-    write( "  const char  " + self.master_table +
-           "[" + repr( self.total ) + "]\n" )
+    write((f"  const char  {self.master_table}[{repr(self.total)}" + "]\n"))
     write( "#ifdef  DEFINE_PS_TABLES_DATA\n" )
     write( "  =\n" )
     write( "  {\n" )
@@ -4946,10 +4945,10 @@ class StringTable:
 
   def dump_sublist( self, file, table_name, macro_name, sublist ):
     write = file.write
-    write( "#define " + macro_name + "  " + repr( len( sublist ) ) + "\n\n" )
+    write(f"#define {macro_name}  {repr(len(sublist))}" + "\n\n")
 
-    write( "  /* Values are offsets into the `" +
-           self.master_table + "' table */\n\n" )
+    write(f"  /* Values are offsets into the `{self.master_table}" +
+          "' table */\n\n")
     write( "#ifndef  DEFINE_PS_TABLES_DATA\n" )
     write( "#ifdef  __cplusplus\n" )
     write( '  extern "C"\n' )
@@ -4957,16 +4956,15 @@ class StringTable:
     write( "  extern\n" )
     write( "#endif\n" )
     write( "#endif\n" )
-    write( "  const short  " + table_name +
-           "[" + macro_name + "]\n" )
+    write(f"  const short  {table_name}[{macro_name}" + "]\n")
     write( "#ifdef  DEFINE_PS_TABLES_DATA\n" )
     write( "  =\n" )
     write( "  {\n" )
 
-    line  = "    "
     comma = ""
     col   = 0
 
+    line = "    "
     for name in sublist:
       line += comma
       line += "%4d" % self.indices[name]
@@ -5107,14 +5105,10 @@ class StringNode:
 
   def dump_debug( self, write, margin ):
     # this is used during debugging
-    line = margin + "+-"
-    if len( self.letter ) == 0:
-      line += "<NOLETTER>"
-    else:
-      line += self.letter
-
+    line = f"{margin}+-"
+    line += "<NOLETTER>" if len( self.letter ) == 0 else self.letter
     if self.value:
-      line += " => " + repr( self.value )
+      line += f" => {repr(self.value)}"
 
     write( line + "\n" )
 
@@ -5125,11 +5119,7 @@ class StringNode:
 
   def locate( self, index ):
     self.index = index
-    if len( self.letter ) > 0:
-      index += len( self.letter ) + 1
-    else:
-      index += 2
-
+    index += len( self.letter ) + 1 if len( self.letter ) > 0 else 2
     if self.value != 0:
       index += 2
 
@@ -5220,8 +5210,8 @@ def dump_encoding( file, encoding_name, encoding_list ):
   write( "  extern\n" )
   write( "#endif\n" )
   write( "#endif\n" )
-  write( "  const unsigned short  " + encoding_name +
-         "[" + repr( len( encoding_list ) ) + "]\n" )
+  write((f"  const unsigned short  {encoding_name}[{repr(len(encoding_list))}"
+         + "]\n"))
   write( "#ifdef  DEFINE_PS_TABLES_DATA\n" )
   write( "  =\n" )
   write( "  {\n" )
@@ -5255,8 +5245,7 @@ def dump_array( the_array, write, array_name ):
   write( "  extern\n" )
   write( "#endif\n" )
   write( "#endif\n" )
-  write( "  const unsigned char  " + array_name +
-         "[" + repr( len( the_array ) ) + "L]\n" )
+  write((f"  const unsigned char  {array_name}[{repr(len(the_array))}" + "L]\n"))
   write( "#ifdef  DEFINE_PS_TABLES_DATA\n" )
   write( "  =\n" )
   write( "  {\n" )
@@ -5287,6 +5276,7 @@ def dump_array( the_array, write, array_name ):
 
 
 def main():
+  """main program body"""  
   """main program body"""
 
   if len( sys.argv ) != 2:
@@ -5353,7 +5343,7 @@ def main():
   dict = StringNode( "", 0 )
 
   for g in range( len( agl_glyphs ) ):
-    dict.add( agl_glyphs[g], eval( "0x" + agl_values[g] ) )
+    dict.add(agl_glyphs[g], eval(f"0x{agl_values[g]}"))
 
   dict       = dict.optimize()
   dict_len   = dict.locate( 0 )
@@ -5478,56 +5468,6 @@ def main():
 #endif /* FT_CONFIG_OPTION_ADOBE_GLYPH_LIST */
 
 """ )
-
-  if 0:  # generate unit test, or don't
-    #
-    # now write the unit test to check that everything works OK
-    #
-    write( "#ifdef TEST\n\n" )
-
-    write( "static const char* const  the_names[] = {\n" )
-    for name in agl_glyphs:
-      write( '  "' + name + '",\n' )
-    write( "  0\n};\n" )
-
-    write( "static const unsigned long  the_values[] = {\n" )
-    for val in agl_values:
-      write( '  0x' + val + ',\n' )
-    write( "  0\n};\n" )
-
-    write( """
-#include <stdlib.h>
-#include <stdio.h>
-
-  int
-  main( void )
-  {
-    int                   result = 0;
-    const char* const*    names  = the_names;
-    const unsigned long*  values = the_values;
-
-
-    for ( ; *names; names++, values++ )
-    {
-      const char*    name      = *names;
-      unsigned long  reference = *values;
-      unsigned long  value;
-
-
-      value = ft_get_adobe_glyph_index( name, name + strlen( name ) );
-      if ( value != reference )
-      {
-        result = 1;
-        fprintf( stderr, "name '%s' => %04x instead of %04x\\n",
-                         name, value, reference );
-      }
-    }
-
-    return result;
-  }
-""" )
-
-    write( "#endif /* TEST */\n" )
 
   write("\n/* END */\n")
 

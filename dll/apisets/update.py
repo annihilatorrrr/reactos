@@ -78,17 +78,14 @@ class Arch(object):
         self._val = initial
 
     def add(self, text):
-        self._val |= sum([Arch.FROM_STR[arch] for arch in text.split(',')])
+        self._val |= sum(Arch.FROM_STR[arch] for arch in text.split(','))
         assert self._val != 0
 
     def has(self, val):
         return (self._val & val) != 0
 
     def to_str(self):
-        arch_str = []
-        for value in Arch.TO_STR:
-            if value & self._val:
-                arch_str.append(Arch.TO_STR[value])
+        arch_str = [Arch.TO_STR[value] for value in Arch.TO_STR if value & self._val]
         return ','.join(arch_str)
 
     def __len__(self):
@@ -122,9 +119,7 @@ class VersionExpr(object):
         pass
 
     def to_str(self):
-        if self.text:
-            return '-version={}'.format(self.text)
-        return ''
+        return f'-version={self.text}' if self.text else ''
 
 
 class SpecEntry(object):
@@ -146,12 +141,8 @@ class SpecEntry(object):
     def init(self, text):
         tokens = re.split(r'([\s\(\)#;])', text.strip())
         tokens = [token for token in tokens if token and not token.isspace()]
-        idx = []
-        for comment in ['#', ';']:
-            if comment in tokens:
-                idx.append(tokens.index(comment))
-        idx = sorted(idx)
-        if idx:
+        idx = [tokens.index(comment) for comment in ['#', ';'] if comment in tokens]
+        if idx := sorted(idx):
             tokens = tokens[:idx[0]]
         if not tokens:
             raise InvalidSpecError(text)
@@ -186,13 +177,13 @@ class SpecEntry(object):
         self._forwarder = tokens.pop(0).split('.', 2)
         if len(self._forwarder) == 1:
             self._forwarder = ['self', self._forwarder[0]]
-        assert len(self._forwarder) in (0, 2), self._forwarder
+        assert len(self._forwarder) in {0, 2}, self._forwarder
         if self._forwarder[0] in ALIAS_DLL:
             self._forwarder[0] = ALIAS_DLL[self._forwarder[0]]
 
     def resolve_forwarders(self, module_lookup, try_modules):
         if self._forwarder:
-            assert self._forwarder[1] == self.name, '{}:{}'.format(self._forwarder[1], self.name)
+            assert self._forwarder[1] == self.name, f'{self._forwarder[1]}:{self.name}'
         if self.noname and self.name == '@':
             return 0    # cannot search for this function
         self._forwarder = []
@@ -216,9 +207,8 @@ class SpecEntry(object):
             return 1
         if self.noname and self.name == '@':
             return 0    # cannot search for this function
-        lst = function_lookup.get(self.name, None)
-        if lst:
-            modules = list(set([func.spec.name for func in lst]))
+        if lst := function_lookup.get(self.name, None):
+            modules = list({func.spec.name for func in lst})
             if len(modules) > 1:
                 mod = None
                 arch = Arch()
@@ -242,37 +232,35 @@ class SpecEntry(object):
             return self._forwarder[0]
 
     def forwarder(self):
-        if self._forwarder:
-            return 1
-        return 0
+        return 1 if self._forwarder else 0
 
     def write(self, spec_file):
         name = self.name
         opts = ''
         estimate_size = 0
         if self.noname:
-            opts = '{} -noname'.format(opts)
+            opts = f'{opts} -noname'
         if self.version:
-            opts = '{} {}'.format(opts, self.version.to_str())
+            opts = f'{opts} {self.version.to_str()}'
         if self.name == '@':
             assert self._ord != '@'
-            name = 'Ordinal' + self._ord
+            name = f'Ordinal{self._ord}'
         if not self._forwarder:
-            spec_file.write('{} stub{} {}{}'.format(self._ord, opts, name, NL_CHAR))
+            spec_file.write(f'{self._ord} stub{opts} {name}{NL_CHAR}')
             estimate_size += 0x1000
         else:
             assert self.arch != Arch(), self.name
             args = '()'
             callconv = 'stdcall'
             fwd = '.'.join(self._forwarder)
-            name = self.name if not self.noname else '@'
+            name = '@' if self.noname else self.name
             arch = self.arch
             if self.callconv == 'extern':
                 args = ''
                 callconv = 'extern -stub'   # HACK
                 fwd += ' # the -stub is a HACK to fix VS < 2017 build!'
             if arch != Arch(Arch.Any):
-                opts = '{} -arch={}'.format(opts, arch.to_str())
+                opts = f'{opts} -arch={arch.to_str()}'
             spec_file.write('{ord} {cc}{opts} {name}{args} {fwd}{nl}'.format(ord=self._ord,
                                                                              cc=callconv,
                                                                              opts=opts,
@@ -295,7 +283,7 @@ class SpecFile(object):
 
     def parse(self):
         with open(self._path, 'rb') as specfile:
-            for line in specfile.readlines():
+            for line in specfile:
                 if line:
                     try:
                         entry = SpecEntry(line, self)
@@ -303,7 +291,7 @@ class SpecFile(object):
                         self._functions[entry.name].append(entry)
                     except InvalidSpecError:
                         pass
-        return (sum([entry.forwarder() for entry in self._entries]), len(self._entries))
+        return sum(entry.forwarder() for entry in self._entries), len(self._entries)
 
     def add_functions(self, function_lookup):
         for entry in self._entries:
@@ -346,22 +334,23 @@ class SpecFile(object):
 
     def resolve_forwarders(self, module_lookup):
         modules = self.forwarder_modules()
-        total = 0
-        for entry in self._entries:
-            total += entry.resolve_forwarders(module_lookup, modules)
+        total = sum(
+            entry.resolve_forwarders(module_lookup, modules)
+            for entry in self._entries
+        )
         return (total, len(self._entries))
 
     def extra_forwarders(self, function_lookup, module_lookup):
-        total = 0
-        for entry in self._entries:
-            total += entry.extra_forwarders(function_lookup, module_lookup)
+        total = sum(
+            entry.extra_forwarders(function_lookup, module_lookup)
+            for entry in self._entries
+        )
         return (total, len(self._entries))
 
     def forwarder_modules(self):
         modules = defaultdict(int)
         for entry in self._entries:
-            module = entry.forwarder_module()
-            if module:
+            if module := entry.forwarder_module():
                 modules[module] += 1
         return sorted(modules, key=modules.get, reverse=True)
 
@@ -383,7 +372,7 @@ class SpecFile(object):
         fwd_strings = ' '.join(fwd_strings)
         name = self.name
         baseaddress = '0x{:8x}'.format(baseaddress)
-        cmakelists.write('add_apiset({} {} {}){}'.format(name, baseaddress, fwd_strings, NL_CHAR))
+        cmakelists.write(f'add_apiset({name} {baseaddress} {fwd_strings}){NL_CHAR}')
         return self._estimate_size
 
 
@@ -391,13 +380,12 @@ class SpecFile(object):
 def generate_specnames(dll_dir):
     win32 = os.path.join(dll_dir, 'win32')
     for dirname in os.listdir(win32):
-        fullpath = os.path.join(win32, dirname, dirname + '.spec')
+        fullpath = os.path.join(win32, dirname, f'{dirname}.spec')
         if not os.path.isfile(fullpath):
-            if '.' in dirname:
-                fullpath = os.path.join(win32, dirname, dirname.rsplit('.', 1)[0] + '.spec')
-                if not os.path.isfile(fullpath):
-                    continue
-            else:
+            if '.' not in dirname:
+                continue
+            fullpath = os.path.join(win32, dirname, dirname.rsplit('.', 1)[0] + '.spec')
+            if not os.path.isfile(fullpath):
                 continue
         yield (fullpath, dirname)
     # Special cases
@@ -417,47 +405,44 @@ def run(wineroot):
 
     version = subprocess.check_output(["git", "describe"], cwd=wineroot).strip()
 
-    print 'Reading Wine apisets for', version
+    global NL_CHAR
     wine_apiset_path = os.path.join(wineroot, 'dlls')
     for dirname in os.listdir(wine_apiset_path):
         if not dirname.startswith('api-'):
             continue
         if not os.path.isdir(os.path.join(wine_apiset_path, dirname)):
             continue
-        fullpath = os.path.join(wine_apiset_path, dirname, dirname + '.spec')
+        fullpath = os.path.join(wine_apiset_path, dirname, f'{dirname}.spec')
         spec = SpecFile(fullpath, dirname)
         wine_apisets.append(spec)
 
-    print 'Parsing Wine apisets,',
+    global NL_CHAR
     total = (0, 0)
     for apiset in wine_apisets:
         total = tuple(map(sum, zip(apiset.parse(), total)))
-    print 'found', total[0], '/', total[1], 'forwarders'
-
-    print 'Reading ReactOS modules'
+    global NL_CHAR
+    global NL_CHAR
     for fullpath, dllname in generate_specnames(os.path.dirname(SCRIPT_DIR)):
         spec = SpecFile(fullpath, dllname)
         ros_modules.append(spec)
 
-    print 'Parsing ReactOS modules'
+    global NL_CHAR
     for module in ros_modules:
         module.parse()
         assert module.name not in module_lookup, module.name
         module_lookup[module.name] = module
         module.add_functions(function_lookup)
 
-    print 'First pass, resolving forwarders,',
+    global NL_CHAR
     total = (0, 0)
     for apiset in wine_apisets:
         total = tuple(map(sum, zip(apiset.resolve_forwarders(module_lookup), total)))
-    print 'found', total[0], '/', total[1], 'forwarders'
-
-    print 'Second pass, searching extra forwarders,',
+    global NL_CHAR
+    global NL_CHAR
     total = (0, 0)
     for apiset in wine_apisets:
         total = tuple(map(sum, zip(apiset.extra_forwarders(function_lookup, module_lookup), total)))
-    print 'found', total[0], '/', total[1], 'forwarders'
-
+    global NL_CHAR
     with open(os.path.join(SCRIPT_DIR, 'CMakeLists.txt.in'), 'rb') as template:
         cmake_template = template.read()
         cmake_template = cmake_template.replace('%WINE_GIT_VERSION%', version)
@@ -466,17 +451,17 @@ def run(wineroot):
             NL_CHAR = '\r\n'
 
     manifest_files = []
-    print 'Writing apisets'
+    global NL_CHAR
     spec_header = [line.replace('\n', NL_CHAR) for line in SPEC_HEADER]
     for apiset in wine_apisets:
-        with open(os.path.join(SCRIPT_DIR, apiset.name + '.spec'), 'wb') as out_spec:
+        with open(os.path.join(SCRIPT_DIR, f'{apiset.name}.spec'), 'wb') as out_spec:
             out_spec.writelines(spec_header)
             apiset.write(out_spec)
-        manifest_files.append('  <file name="{}.dll"/>'.format(apiset.name))
+        manifest_files.append(f'  <file name="{apiset.name}.dll"/>')
 
-    print 'Generating manifest'
+    global NL_CHAR
     manifest_name = 'x86_reactos.apisets_6595b64144ccf1df_1.0.0.0_none_deadbeef.manifest'
-    with open(os.path.join(SCRIPT_DIR, manifest_name + '.in'), 'rb') as template:
+    with open(os.path.join(SCRIPT_DIR, f'{manifest_name}.in'), 'rb') as template:
         manifest_template = template.read()
         manifest_template = manifest_template.replace('%WINE_GIT_VERSION%', version)
         file_list = '\r\n'.join(manifest_files)
@@ -484,14 +469,14 @@ def run(wineroot):
         with open(os.path.join(SCRIPT_DIR, manifest_name), 'wb') as manifest:
             manifest.write(manifest_template)
 
-    print 'Writing CMakeLists.txt'
+    global NL_CHAR
     baseaddress = 0x60000000
     with open(os.path.join(SCRIPT_DIR, 'CMakeLists.txt'), 'wb') as cmakelists:
         cmakelists.write(cmake_template)
         for apiset in wine_apisets:
             baseaddress += apiset.write_cmake(cmakelists, baseaddress)
             baseaddress += (0x10000 - baseaddress) % 0x10000
-    print 'Done'
+    global NL_CHAR
 
 def main(paths):
     for path in paths:
